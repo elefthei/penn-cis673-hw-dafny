@@ -22,10 +22,6 @@ predicate permutation(a: seq<int>, b: array<int>) reads b {
     |a| == b.Length && forall i :: 0 <= i < b.Length ==> b[i] in a
 }
 
-predicate xor(a: bool, b: bool) {
-    (a == true && b == false) || (a == false && b == true)
-}
-
 method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
     requires sorted_seq(a1)
     requires sorted_seq(a2)
@@ -67,16 +63,16 @@ method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
       i := i + 1;
   }
 
-  // only one of the two is true
+  // one of the two is true
   assert(l == |a1| || r == |a2|);
   assert(i == l + r);
 
   if(l == |a1|) {
-    forall j | r <= j < |a2| { res[i+j] := a2[j]; }
+    forall j | r <= j < |a2| { res[l+j] := a2[j]; }
     return;
   }
   else if(r == |a2|) {
-    forall j | l <= j < |a1| { res[i+j] := a1[j]; }
+    forall j | l <= j < |a1| { res[r+j] := a1[j]; }
     return;
   }
 }
