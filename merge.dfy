@@ -5,16 +5,13 @@ predicate sorted_seq(a: seq<int>) {
 predicate sorted_until(a: array<int>, until: nat)
 requires until <= a.Length
 reads a {
-    until == 0 ||
     forall i, j :: 0 <= i < j < until ==> a[i] <= a[j]
 }
 
 predicate permutation_until(a: seq<int>, b: array<int>, until: nat)
 requires until <= b.Length
 reads b {
-    until == 0 ||
-    (until == |a| &&
-        forall i :: 0 <= i < until ==> b[i] in a)
+    until == |a| && forall i :: 0 <= i < until ==> b[i] in a
 }
 
 predicate sorted(a: array<int>) reads a {
@@ -71,7 +68,7 @@ method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
   }
 
   // only one of the two is true
-  assert(xor(l == |a1|, r == |a2|));
+  assert(l == |a1| || r == |a2|);
   assert(i == l + r);
 
   if(l == |a1|) {
