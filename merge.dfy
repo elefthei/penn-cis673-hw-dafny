@@ -8,30 +8,44 @@ reads a {
     forall i, j :: from <= i < j < until ==> a[i] <= a[j]
 }
 
-predicate permutation_range(a: seq<int>, b: array<int>, from: nat, until: nat)
+predicate permutation_range(a1: seq<int>, a2: seq<int>,
+                            b: array<int>,
+                            from: nat, until: nat, m: map<int, (bool, int)>)
 requires from <= until <= b.Length
-requires until - from == |a|
+requires until - from == |a1| + |a2|
+requires |m| == |a1| + |a2|
+requires forall i :: from <= i < until ==> i in m
+requires forall i :: from <= i < until ==>
+  match m[i]
+    case (true, n) => 0 <= n < |a1|
+    case (false, n) => 0 <= n < |a2|
 reads b {
-    var bs := b[from .. until];
-    forall i :: from <= i < |bs| ==> b[i] in a &&
-    forall i :: from <= i < |a| ==> a[i] in bs
+    forall i :: from <= i < until ==>
+      match m[i]
+        case (true, n) => a1[n] == b[i]
+        case (false, n) => a2[n] == b[i]
 }
 
 predicate sorted(a: array<int>) reads a {
   sorted_range(a, 0, a.Length)
 }
 
-predicate permutation(a: seq<int>, b: array<int>)
-requires |a| == b.Length
+predicate permutation(a1: seq<int>,
+                      a2: seq<int>,
+                      b: array<int>,
+                      m: map<int, (bool, int)>)
+requires |a1| + |a2| == b.Length
+requires |m| == |a1| + |a2|
+requires forall i :: 0 <= i < b.Length ==> i in m
+requires forall i :: 0 <= i < b.Length ==>
+  match m[i]
+    case (true, n) => 0 <= n < |a1|
+    case (false, n) => 0 <= n < |a2|
 reads b {
-  permutation_range(a, b, 0, b.Length)
+  permutation_range(a1, a2, b, 0, b.Length, m)
 }
 
-method tester()  {
-  var a : seq<int> := [1, 2, 3, 4][..];
-  assert(|a[..0]| == 0);
-}
-
+// This function is *cursed*
 method copy(a: seq<int>, c: array<int>, at: nat)
 requires at <= c.Length
 requires |a| == c.Length - at
@@ -41,34 +55,37 @@ modifies c {
   while (i < |a|)
   decreases |a| - i
   invariant 0 <= i <= |a|
-  invariant forall j :: 0 <= j < i ==> c[at + j] == a[j]
-  {
+  invariant forall j :: 0 <= j < i ==> c[at + j] == a[j] {
     c[at + i] := a[i];
     i := i + 1;
   }
 }
 
-method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
+method merge(a1: seq<int>, a2: seq<int>)
+    returns (res:array<int>, m: map<int, (bool, int)>)
     requires sorted_seq(a1)
     requires sorted_seq(a2)
     ensures sorted(res)
-    ensures res.Length == |a1| + |a2|
-    ensures permutation(a1 + a2, res) {
+    ensures permutation(a1, a2, res, m)
+    ensures res.Length == |a1| + |a2| {
   if(|a1| == 0 && |a2| == 0) {
     res := new int[0];
+    m := map[];
     return;
   } else if (|a1| == 0) { // res := a2
     res := new int[|a2|];
+    m := map i | 0 <= i < |a2| :: (false, i);
     copy(a2, res, 0);
     assert(forall i :: 0 <= i < |a2| ==> res[i] == a2[i]);
-    assert(permutation(a2, res));
+    assert(permutation(a1, a2, res, m));
     assert(sorted(res));
     return;
   } else if (|a2| == 0) { // res := a1
     res := new int[|a1|];
+    m := map i | 0 <= i < |a1| :: (true, i);
     copy(a1, res, 0);
     assert(forall i :: 0 <= i < |a1| ==> res[i] == a1[i]);
-    assert(permutation(a1, res));
+    assert(permutation(a1, a2, res, m));
     assert(sorted(res));
     return;
   }
@@ -79,7 +96,10 @@ method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
   var r := 0;
   var i := 0;
 
-  while (l < |a1| && r < |a2|)
+  // new index -> (old index, is_left)
+  m := map[];
+
+  while (i < res.Length)
   decreases res.Length - i
   invariant 0 <= l <= |a1|
   invariant 0 <= r <= |a2|
@@ -87,35 +107,24 @@ method merge(a1: seq<int>, a2: seq<int>) returns (res:array<int>)
   invariant sorted_range(res, 0, i)
   invariant forall p, q :: 0 <= p < i && l <= q < |a1| ==> res[p] <= a1[q]
   invariant forall p, q :: 0 <= p < i && r <= q < |a2| ==> res[p] <= a2[q]
-  invariant permutation_range(a1[..l] + a2[..r], res, 0, i) {
-      if(a1[l] <= a2[r]) {
+  invariant permutation_range(a1[..l], a2[..r], res, 0, i, m) {
+      if(l == |a1|) {
+        res[i] := a2[r];
+        r := r + 1;
+        m := m[i := (false, r)];
+      } else if (r == |a2|) {
         res[i] := a1[l];
         l := l + 1;
-        assert(permutation_range(a1[..l] + a2[..r], res, 0, i));
+        m := m[i := (true, l)];
+      } else if (a1[l] <= a2[r]) {
+        res[i] := a1[l];
+        l := l + 1;
+        m := m[i := (true, l)];
       } else {
         res[i] := a2[r];
         r := r + 1;
+        m := m[i := (false, r)];
       }
       i := i + 1;
-  }
-
-  // one of the two is true
-  assert(l == |a1| || r == |a2|);
-
-  if(l == |a1|) {
-    var ra2 := a2[r..];
-    copy(ra2, res, i);
-    assert(i == |a1| + r);
-    assert(res.Length == |a1| + |a2|);
-    assert(forall j :: 0 <= j < |ra2| ==> res[i + j] == ra2[j]);
-    assert(forall j :: r <= j < |a2| ==> res[i+j] == a2[j]);
-    assert(sorted_seq(ra2));
-    assert(sorted(res));
-    return;
-  } else if(r == |a2|) {
-    assert(i == l + |a2|);
-    assert(res.Length == |a1| + |a2|);
-    copy(a1[l..], res, i);
-    return;
   }
 }
